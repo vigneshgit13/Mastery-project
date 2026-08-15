@@ -1,0 +1,1 @@
+from app.main import gcs_trigger
