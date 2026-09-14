@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class UploadEvent(BaseModel):
+
+    model_config = ConfigDict(
+        extra="ignore"
+    )
 
     event_id: str
 
@@ -26,3 +32,13 @@ class UploadEvent(BaseModel):
     uploaded_at: datetime
 
     created_by: str
+
+    @classmethod
+    def from_dict(
+        cls,
+        payload: dict,
+    ) -> "UploadEvent":
+
+        return cls.model_validate(
+            payload
+        )

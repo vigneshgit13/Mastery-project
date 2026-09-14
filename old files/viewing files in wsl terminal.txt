@@ -1,0 +1,8 @@
+# Go to home
+cd ~
+
+# List the files
+ls -lh faiss_index.bin face_metadata.pkl
+
+
+\\wsl.localhost\Ubuntu\home\vignesh\

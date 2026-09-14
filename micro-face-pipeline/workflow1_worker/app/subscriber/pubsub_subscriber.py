@@ -1,54 +1,47 @@
+from __future__ import annotations
+
 import json
 import logging
 
 from google.cloud import pubsub_v1
 
+from app.ai.pipeline_factory import create_face_pipeline
 from app.core.config import (
     PROJECT_ID,
     PUBSUB_SUBSCRIPTION,
 )
-
 from app.models.upload_event import UploadEvent
+from app.services.processing_service import ProcessingService
 
-from app.services.gcs_service import (
-    gcs_service,
-)
-
-from app.ai.detector import (
-    SCRFDDetector,
-)
-
-from app.ai.aligner import (
-    FaceAligner,
-)
-
-from app.ai.recognizer import (
-    ArcFaceRecognizer,
-)
-
-from app.ai.attributes import (
-    GenderAgeClassifier,
-)
-
-from app.ai.pipeline import (
-    FacePipeline,
-)
-
-
-logging.basicConfig(
-    level=logging.INFO,
-)
 
 logger = logging.getLogger(__name__)
 
 
 class PubSubSubscriber:
+    """
+    Thin Pub/Sub adapter.
 
-    def __init__(self):
+    Responsibilities:
 
-        # ==========================================================
-        # PUB/SUB
-        # ==========================================================
+        Pub/Sub
+            ↓
+        decode
+            ↓
+        validate UploadEvent
+            ↓
+        ProcessingService
+            ↓
+        ACK / NACK
+    """
+
+    def __init__(
+        self,
+        processing_service: ProcessingService,
+    ) -> None:
+
+        self.processing_service = (
+            processing_service
+        )
 
         self.subscriber = (
             pubsub_v1.SubscriberClient()
@@ -61,245 +54,128 @@ class PubSubSubscriber:
             )
         )
 
-        # ==========================================================
-        # LOAD AI MODELS ONCE
-        # ==========================================================
-
-        logger.info("=" * 80)
-        logger.info("INITIALIZING AI MODELS")
-        logger.info("=" * 80)
-
-        self.detector = SCRFDDetector(
-            model_path=(
-                "models/scrfd_10g_bnkps.onnx"
-            ),
-            input_size=640,
-            confidence_threshold=0.5,
-            nms_threshold=0.4,
-        )
-
-        self.aligner = FaceAligner()
-
-        self.recognizer = ArcFaceRecognizer(
-            model_path=(
-                "models/glintr100.onnx"
-            ),
-        )
-
-        self.classifier = GenderAgeClassifier(
-            model_path=(
-                "models/model.onnx"
-            ),
-        )
-
-        # ==========================================================
-        # FACE PIPELINE
-        # ==========================================================
-
-        self.pipeline = FacePipeline(
-            detector=self.detector,
-            aligner=self.aligner,
-            recognizer=self.recognizer,
-            classifier=self.classifier,
+        logger.info(
+            "Pub/Sub subscriber initialized."
         )
 
         logger.info(
-            "AI models initialized successfully"
+            "Subscription: %s",
+            self.subscription_path,
         )
 
-        logger.info("=" * 80)
-
     # ==================================================================
-    # PUB/SUB CALLBACK
+    # CALLBACK
     # ==================================================================
 
     def callback(
         self,
         message,
-    ):
+    ) -> None:
+
+        logger.info("=" * 80)
+        logger.info("PUB/SUB MESSAGE RECEIVED")
+        logger.info(
+            "Message ID: %s",
+            message.message_id,
+        )
+        logger.info("=" * 80)
 
         try:
 
-            # ======================================================
-            # 1. READ MESSAGE
-            # ======================================================
+            # ----------------------------------------------------------
+            # Decode
+            # ----------------------------------------------------------
 
-            text = message.data.decode(
-                "utf-8"
+            payload = json.loads(
+                message.data.decode(
+                    "utf-8"
+                )
             )
 
-            logger.info("=" * 80)
-            logger.info(
-                "RECEIVED PUB/SUB MESSAGE"
-            )
-            logger.info("=" * 80)
+            # ----------------------------------------------------------
+            # Validate
+            # ----------------------------------------------------------
 
-            logger.info(
-                "%s",
-                text,
-            )
-
-            # ======================================================
-            # 2. PARSE JSON
-            # ======================================================
-
-            data = json.loads(
-                text
-            )
-
-            # ======================================================
-            # 3. VALIDATE UPLOAD EVENT
-            # ======================================================
-
-            upload_event = (
+            event = (
                 UploadEvent.model_validate(
-                    data
+                    payload
                 )
             )
 
             logger.info(
-                "UploadEvent validated"
+                "UploadEvent validated."
             )
 
             logger.info(
-                "Event ID    : %s",
-                upload_event.event_id,
+                "Event ID : %s",
+                event.event_id,
             )
 
             logger.info(
-                "Bucket      : %s",
-                upload_event.bucket,
+                "Bucket   : %s",
+                event.bucket,
             )
 
             logger.info(
-                "Blob        : %s",
-                upload_event.blob_name,
+                "Blob     : %s",
+                event.blob_name,
             )
 
-            # ======================================================
-            # 4. DOWNLOAD IMAGE FROM GCS
-            # ======================================================
+            # ----------------------------------------------------------
+            # Business processing
+            # ----------------------------------------------------------
 
-            local_path = (
-                gcs_service.download_file(
-                    bucket_name=(
-                        upload_event.bucket
-                    ),
-                    blob_name=(
-                        upload_event.blob_name
-                    ),
+            result = (
+                self.processing_service.process_upload(
+                    event
                 )
             )
 
             logger.info(
-                "Downloaded image: %s",
-                local_path,
+                "Processing result: %s",
+                result,
             )
 
-            # ======================================================
-            # 5. RUN COMPLETE AI PIPELINE
-            # ======================================================
-
-            logger.info("=" * 80)
-            logger.info(
-                "RUNNING FACE PIPELINE"
-            )
-            logger.info("=" * 80)
-
-            records = (
-                self.pipeline.process(
-                    local_path
-                )
-            )
-
-            # ======================================================
-            # 6. PIPELINE RESULT
-            # ======================================================
-
-            logger.info("=" * 80)
-            logger.info(
-                "PIPELINE RESULT"
-            )
-            logger.info("=" * 80)
-
-            logger.info(
-                "Total faces: %d",
-                len(records),
-            )
-
-            for record in records:
-
-                logger.info(
-                    "Face %02d | "
-                    "Gender: %s (%.4f) | "
-                    "Age: %d | "
-                    "Group: %s | "
-                    "Embedding: %d-D",
-
-                    record.face_index,
-
-                    record.gender.label,
-
-                    record.gender.confidence,
-
-                    record.age.years,
-
-                    record.age.group,
-
-                    len(record.embedding),
-                )
-
-            # ======================================================
-            # 7. ACK ONLY AFTER COMPLETE SUCCESS
-            # ======================================================
+            # ----------------------------------------------------------
+            # ACK ONLY AFTER COMPLETE SUCCESS
+            # ----------------------------------------------------------
 
             message.ack()
 
             logger.info(
-                "Message ACKed"
+                "Message ACKed: %s",
+                message.message_id,
             )
-
-            logger.info("=" * 80)
-
-        # ==========================================================
-        # INVALID JSON
-        # ==========================================================
 
         except json.JSONDecodeError:
 
             logger.error(
-                "Invalid JSON received."
+                "Invalid JSON received. "
+                "ACKing because retry cannot fix malformed JSON."
             )
 
-            # Invalid message cannot be fixed
-            # by retrying.
-
             message.ack()
-
-        # ==========================================================
-        # ANY PROCESSING FAILURE
-        # ==========================================================
 
         except Exception:
 
             logger.exception(
-                "Processing failed. "
+                "Workflow 1 processing failed. "
                 "Message will be retried."
             )
 
             message.nack()
 
     # ==================================================================
-    # START SUBSCRIBER
+    # START
     # ==================================================================
 
     def start(
         self,
-    ):
+    ) -> None:
 
         logger.info("=" * 80)
         logger.info(
-            "STARTING PUB/SUB SUBSCRIBER"
+            "STARTING WORKFLOW 1 PUB/SUB SUBSCRIBER"
         )
         logger.info(
             "Subscription: %s",
@@ -307,14 +183,89 @@ class PubSubSubscriber:
         )
         logger.info("=" * 80)
 
-        future = (
+        streaming_future = (
             self.subscriber.subscribe(
                 self.subscription_path,
                 callback=self.callback,
             )
         )
 
-        future.result()
+        try:
+
+            streaming_future.result()
+
+        except KeyboardInterrupt:
+
+            logger.info(
+                "Stopping subscriber..."
+            )
+
+            streaming_future.cancel()
+
+        except Exception:
+
+            logger.exception(
+                "Subscriber stopped unexpectedly."
+            )
+
+            streaming_future.cancel()
+
+            raise
+
+        finally:
+
+            self.subscriber.close()
 
 
-subscriber = PubSubSubscriber()
+def create_subscriber() -> PubSubSubscriber:
+
+    logger.info("=" * 80)
+    logger.info(
+        "INITIALIZING WORKFLOW 1"
+    )
+    logger.info("=" * 80)
+
+    # --------------------------------------------------------------
+    # AI pipeline
+    # --------------------------------------------------------------
+
+    pipeline = (
+        create_face_pipeline()
+    )
+
+    # --------------------------------------------------------------
+    # Processing service
+    # --------------------------------------------------------------
+
+    processing_service = (
+        ProcessingService(
+            pipeline=pipeline
+        )
+    )
+
+    # --------------------------------------------------------------
+    # Subscriber
+    # --------------------------------------------------------------
+
+    return PubSubSubscriber(
+        processing_service=processing_service
+    )
+
+
+if __name__ == "__main__":
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format=(
+            "%(asctime)s | "
+            "%(levelname)s | "
+            "%(name)s | "
+            "%(message)s"
+        ),
+    )
+
+    subscriber = (
+        create_subscriber()
+    )
+
+    subscriber.start()

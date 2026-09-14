@@ -1,2 +1,54 @@
-/new_updated
-/old files
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# AI / ML models
+*.onnx
+*.pt
+*.pth
+*.bin
+
+# Vector databases / indexes
+data/hnsw/
+**/data/hnsw/
+*.faiss
+*.index
+
+# Temporary files
+temp/
+**/temp/
+
+# Generated test/output files
+output/
+**/output/
+
+# Archives
+*.zip
+
+# OS / IDE
+.vscode/
+.idea/
+*.swp
+
+# Python environments
+.venv/
+venv/
+env/
+
+# Logs
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Generated/cache files
+*.pyc
+
+# Credentials
+*credentials*.txt

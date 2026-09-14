@@ -1,6 +1,6 @@
 import logging
 
-from app.db.database import Base, engine
+from app.db.postgres import Base, engine
 from app.db import models  # noqa: F401
 
 

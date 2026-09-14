@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from typing import List
@@ -153,6 +155,40 @@ class FacePipeline:
             )
 
             # ==============================================================
+            # LANDMARKS
+            # ==============================================================
+
+            landmarks: list[float] | None = None
+
+            if detection.landmarks is not None:
+
+                landmark_array = np.asarray(
+                    detection.landmarks,
+                    dtype=np.float32,
+                )
+
+                if landmark_array.size == 10:
+
+                    landmarks = [
+                        float(value)
+                        for value in landmark_array.reshape(-1)
+                    ]
+
+                    logger.debug(
+                        "Landmarks for face %d: %s",
+                        index,
+                        landmarks,
+                    )
+
+                else:
+
+                    logger.warning(
+                        "Unexpected landmark shape for face %d: %s",
+                        index,
+                        landmark_array.shape,
+                    )
+
+            # ==============================================================
             # STEP 2A — FACE ALIGNMENT
             # ==============================================================
 
@@ -191,7 +227,7 @@ class FacePipeline:
             )
 
             # ==============================================================
-            # STEP 2B — ARCFACE EMBEDDING
+            # STEP 2B — ARC-FACE EMBEDDING
             # ==============================================================
 
             logger.info(
@@ -227,56 +263,38 @@ class FacePipeline:
             embedding = np.asarray(
                 embedding,
                 dtype=np.float32,
-            )
+            ).reshape(-1)
 
-            logger.info(
-                "Embedding shape: %s",
-                embedding.shape,
-            )
+            if embedding.size != 512:
 
-            embedding_norm = float(
-                np.linalg.norm(
-                    embedding
-                )
-            )
-
-            logger.info(
-                "Embedding norm: %.6f",
-                embedding_norm,
-            )
-
-            # ==============================================================
-            # VALIDATE EMBEDDING
-            # ==============================================================
-
-            if embedding.ndim != 1:
-
-                logger.warning(
-                    "Unexpected embedding dimensions "
-                    "for face %d: %s",
+                logger.error(
+                    "Unexpected embedding dimension for face %d: %d",
                     index,
-                    embedding.shape,
+                    embedding.size,
                 )
 
                 continue
 
-            if embedding.shape[0] != 512:
+            if not np.isfinite(embedding).all():
 
-                logger.warning(
-                    "Unexpected embedding size "
-                    "for face %d: %d",
+                logger.error(
+                    "Embedding contains NaN/Inf for face %d",
                     index,
-                    embedding.shape[0],
                 )
 
                 continue
 
+            logger.info(
+                "Embedding generated: %d-D",
+                embedding.size,
+            )
+
             # ==============================================================
-            # STEP 2C — AGE + GENDER
+            # STEP 2C — GENDER + AGE
             # ==============================================================
 
             logger.info(
-                "Running age/gender classification..."
+                "Classifying gender and age..."
             )
 
             try:
@@ -290,8 +308,7 @@ class FacePipeline:
             except Exception:
 
                 logger.exception(
-                    "Age/gender classification failed "
-                    "for face %d",
+                    "Gender/age classification failed for face %d",
                     index,
                 )
 
@@ -300,30 +317,20 @@ class FacePipeline:
             if not attributes:
 
                 logger.warning(
-                    "Attribute classifier returned "
-                    "empty result for face %d",
+                    "No attributes returned for face %d",
                     index,
                 )
 
                 continue
 
-            # ==============================================================
-            # EXTRACT GENDER
-            # ==============================================================
+            # --------------------------------------------------------------
+            # Gender
+            # --------------------------------------------------------------
 
             gender = attributes.get(
-                "gender"
+                "gender",
+                {},
             )
-
-            if not gender:
-
-                logger.warning(
-                    "Gender result missing "
-                    "for face %d",
-                    index,
-                )
-
-                continue
 
             gender_label = gender.get(
                 "label"
@@ -336,8 +343,7 @@ class FacePipeline:
             if gender_label is None:
 
                 logger.warning(
-                    "Gender label missing "
-                    "for face %d",
+                    "Gender label missing for face %d",
                     index,
                 )
 
@@ -346,34 +352,28 @@ class FacePipeline:
             if gender_confidence is None:
 
                 logger.warning(
-                    "Gender confidence missing "
-                    "for face %d",
+                    "Gender confidence missing for face %d",
                     index,
                 )
 
                 continue
+
+            gender_label = str(
+                gender_label
+            )
 
             gender_confidence = float(
                 gender_confidence
             )
 
-            # ==============================================================
-            # EXTRACT AGE
-            # ==============================================================
+            # --------------------------------------------------------------
+            # Age
+            # --------------------------------------------------------------
 
             age = attributes.get(
-                "age"
+                "age",
+                {},
             )
-
-            if not age:
-
-                logger.warning(
-                    "Age result missing "
-                    "for face %d",
-                    index,
-                )
-
-                continue
 
             age_years = age.get(
                 "years"
@@ -383,17 +383,7 @@ class FacePipeline:
                 "group"
             )
 
-            # --------------------------------------------------------------
-            # Age confidence is OPTIONAL.
-            #
-            # The new model currently does not necessarily provide
-            # a calibrated confidence value for estimated age.
-            # Therefore we must NEVER do:
-            #
-            #     float(None)
-            #
-            # --------------------------------------------------------------
-
+            # Age confidence is optional.
             age_confidence = age.get(
                 "confidence"
             )
@@ -401,8 +391,7 @@ class FacePipeline:
             if age_years is None:
 
                 logger.warning(
-                    "Age years missing "
-                    "for face %d",
+                    "Age years missing for face %d",
                     index,
                 )
 
@@ -411,8 +400,7 @@ class FacePipeline:
             if age_group is None:
 
                 logger.warning(
-                    "Age group missing "
-                    "for face %d",
+                    "Age group missing for face %d",
                     index,
                 )
 
@@ -480,6 +468,8 @@ class FacePipeline:
                     float(value)
                     for value in detection.bbox
                 ],
+
+                landmarks=landmarks,
 
                 # ----------------------------------------------------------
                 # ArcFace
