@@ -89,6 +89,45 @@ class ClusteringProcessor:
 
         event.validate_event_type()
 
+        # --------------------------------------------------------------
+        # Explicit event-level idempotency.
+        # --------------------------------------------------------------
+
+        if self.repository.is_event_completed(
+            str(event.event_id)
+        ):
+            logger.info(
+                "Workflow 2 event already completed; "
+                "skipping duplicate event: event_id=%s "
+                "upload_id=%s image_id=%s",
+                event.event_id,
+                event.upload_id,
+                event.image_id,
+            )
+
+            return ClusteringProcessResult(
+                status="COMPLETED",
+                event_id=str(event.event_id),
+                upload_id=event.upload_id,
+                image_id=event.image_id,
+                expected_face_count=event.face_count,
+                processed_face_count=event.face_count,
+                created_cluster_count=0,
+                existing_cluster_count=event.face_count,
+                assignments=tuple(),
+            )
+
+        logger.info(
+            "Starting Workflow 2 clustering: "
+            "event_id=%s upload_id=%s image_id=%s "
+            "expected_faces=%s",
+            event.event_id,
+            event.upload_id,
+            event.image_id,
+            event.face_count,
+        )
+
+
         logger.info(
             "Starting Workflow 2 clustering: "
             "event_id=%s upload_id=%s image_id=%s "
@@ -146,6 +185,19 @@ class ClusteringProcessor:
         existing_count = (
             len(assignments)
             - created_count
+        )
+
+        # --------------------------------------------------------------
+        # Mark the event as COMPLETED only after every face has been
+        # processed successfully.
+        # --------------------------------------------------------------
+
+        self.repository.mark_event_completed(
+            event_id=str(event.event_id),
+            event_type=str(event.event_type),
+            workflow="workflow2",
+            upload_id=event.upload_id,
+            image_id=event.image_id,
         )
 
         logger.info(

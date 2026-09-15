@@ -152,7 +152,7 @@ class ClusteringService:
                 similarity=1.0,
                 created_new_cluster=False,
             )
-
+       
         # --------------------------------------------------------------
         # 2. Retrieve actual embedding from Workflow 1.
         # --------------------------------------------------------------

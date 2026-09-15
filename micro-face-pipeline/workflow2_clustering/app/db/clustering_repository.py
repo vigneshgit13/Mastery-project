@@ -424,6 +424,97 @@ class ClusteringRepository:
         )
 
     # ==================================================================
+    # EVENT IDEMPOTENCY
+    # ==================================================================
+         # ==================================================================
+    # EVENT IDEMPOTENCY
+    # ==================================================================
+
+    def is_event_completed(
+        self,
+        event_id: str,
+    ) -> bool:
+        """
+        Return True when Workflow 2 has already completed this event.
+
+        PostgreSQL is the authoritative source for event-level
+        idempotency.
+        """
+
+        query = text(
+            f"""
+            SELECT 1
+            FROM {SCHEMA}.workflow2_processed_events
+            WHERE event_id = :event_id
+              AND status = 'COMPLETED'
+            LIMIT 1
+            """
+        )
+
+        row = (
+            self.db.execute(
+                query,
+                {
+                    "event_id": str(event_id),
+                },
+            )
+            .first()
+        )
+
+        return row is not None
+
+    def mark_event_completed(
+        self,
+        *,
+        event_id: str,
+        event_type: str,
+        workflow: str,
+        upload_id: int,
+        image_id: int,
+    ) -> None:
+        """
+        Mark a Workflow 2 event as successfully completed.
+
+        The event_id primary key prevents duplicate event records.
+        Repeated completion attempts are harmless.
+        """
+
+        query = text(
+            f"""
+            INSERT INTO {SCHEMA}.workflow2_processed_events
+                (
+                    event_id,
+                    event_type,
+                    workflow,
+                    upload_id,
+                    image_id,
+                    status
+                )
+            VALUES
+                (
+                    :event_id,
+                    :event_type,
+                    :workflow,
+                    :upload_id,
+                    :image_id,
+                    'COMPLETED'
+                )
+            ON CONFLICT (event_id) DO NOTHING
+            """
+        )
+
+        self.db.execute(
+            query,
+            {
+                "event_id": str(event_id),
+                "event_type": str(event_type),
+                "workflow": str(workflow),
+                "upload_id": int(upload_id),
+                "image_id": int(image_id),
+            },
+        )
+
+    # ==================================================================
     # CLUSTER MEMBERS
     # ==================================================================
 
