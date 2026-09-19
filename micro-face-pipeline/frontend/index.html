@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Face Clustering Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>Face Clustering Dashboard</h1>
+    <p>Workflow 3 Retrieval</p>
+  </div>
+  <button id="refreshBtn">Refresh</button>
+</header>
+
+<main class="container">
+  <div id="status" class="status">Loading dashboard...</div>
+
+  <section class="cards">
+    <article class="card"><span>Total Faces</span><strong id="totalFaces">—</strong></article>
+    <article class="card"><span>Total Clusters</span><strong id="totalClusters">—</strong></article>
+    <article class="card"><span>Total Images</span><strong id="totalImages">—</strong></article>
+  </section>
+
+  <section class="two">
+    <article class="panel">
+      <h2>Gender Distribution</h2>
+      <div id="genderDistribution"></div>
+    </article>
+    <article class="panel">
+      <h2>Age Group Distribution</h2>
+      <div id="ageDistribution"></div>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="heading">
+      <div>
+        <h2>Clusters</h2>
+        <p>Select a cluster to inspect its faces and images.</p>
+      </div>
+      <span id="clusterCount" class="badge">—</span>
+    </div>
+    <div id="clusters" class="clusters"></div>
+  </section>
+
+  <section id="clusterPanel" class="panel hidden">
+    <div class="heading">
+      <div>
+        <h2 id="clusterTitle">Cluster</h2>
+        <p id="clusterMeta"></p>
+      </div>
+      <button id="closeCluster">Close</button>
+    </div>
+
+    <div id="clusterFaces" class="face-grid"></div>
+
+    <h3>Images in Cluster</h3>
+    <div id="clusterImages" class="images"></div>
+  </section>
+
+  <section id="imagePanel" class="panel hidden">
+    <div class="heading">
+      <div>
+        <h2 id="imageTitle">Image Faces</h2>
+        <p id="imageMeta"></p>
+      </div>
+      <button id="closeImage">Close</button>
+    </div>
+
+    <div id="imageFaces" class="face-grid"></div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

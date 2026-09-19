@@ -55,3 +55,14 @@ POSTGRES_USER = os.getenv(
 POSTGRES_PASSWORD = os.getenv(
     "POSTGRES_PASSWORD",
 )
+
+
+
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://127.0.0.1:3000,http://localhost:3000",
+    ).split(",")
+    if origin.strip()
+]

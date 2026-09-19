@@ -1,7 +1,8 @@
 from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
+from app.services.thumbnail_service import ThumbnailService
 
-from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.postgres import get_db
@@ -140,3 +141,41 @@ def get_image_faces(
         )
 
     return ImageFacesResponse(**result)
+
+
+@router.get("/faces/{face_id}/thumbnail")
+def get_face_thumbnail(
+    face_id: int,
+    db: Session = Depends(get_db),
+) -> Response:
+    repository = DashboardRepository(db)
+    service = ThumbnailService(repository)
+
+    try:
+        thumbnail = service.get_face_thumbnail(face_id)
+
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
+
+    if thumbnail is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Face {face_id} not found",
+        )
+
+    return Response(
+        content=thumbnail,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+        },
+    )

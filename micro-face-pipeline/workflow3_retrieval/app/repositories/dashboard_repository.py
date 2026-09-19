@@ -387,6 +387,29 @@ class DashboardRepository:
             for row in rows
         ]
 
+    def get_face_thumbnail_data(self, face_id: int) -> dict | None:
+         query = text(f"""
+        SELECT
+            f.id AS face_id,
+            f.image_id,
+            f.bbox_x1,
+            f.bbox_y1,
+            f.bbox_x2,
+            f.bbox_y2,
+            i.local_path
+        FROM {SCHEMA}.faces f
+        JOIN {SCHEMA}.images i
+            ON i.id = f.image_id
+        WHERE f.id = :face_id
+        LIMIT 1
+    """)
+
+         row = self.db.execute(
+        query,
+        {"face_id": face_id},
+    ).mappings().first()
+
+         return dict(row) if row else None
                             
                     
                     
